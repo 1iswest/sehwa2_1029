@@ -1,11 +1,10 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
 
 # 🌟 페이지 설정
 st.set_page_config(page_title="경제 공부용 투자 시뮬레이터 💰", page_icon="📈", layout="centered")
 
-# 🎨 스타일
+# 🎨 스타일 (CSS)
 st.markdown("""
     <style>
     body {
@@ -50,7 +49,7 @@ else:
         "Value": [investment * (1 + (annual_return / 100) * i) for i in range(1, years + 1)]
     })
 
-# 💵 최종 수익 요약
+# 💵 결과 요약
 final_value = df["Value"].iloc[-1]
 profit = final_value - investment
 
@@ -63,13 +62,9 @@ st.markdown(f"""
 - **총 수익:** 🎉 **{profit:,.0f} 원**
 """)
 
-# 📊 그래프
-fig, ax = plt.subplots()
-ax.plot(df["Year"], df["Value"], marker="o", linewidth=2)
-ax.set_title("💹 투자 성장 그래프", fontsize=14)
-ax.set_xlabel("투자 경과 년수")
-ax.set_ylabel("투자금 가치 (원)")
-st.pyplot(fig)
+# 📊 Streamlit 내장 그래프
+st.subheader("💹 투자 성장 그래프")
+st.line_chart(df.set_index("Year"))
 
 # 📘 경제 개념 설명
 st.markdown("---")
