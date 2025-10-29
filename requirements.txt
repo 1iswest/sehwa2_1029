@@ -1,2 +1,4 @@
 yfinance
 plotly
+pandas
+folium
