@@ -1,6 +1,5 @@
 import streamlit as st
 st.title('은서')
-st.subheader('집에 가고 싶다')
 st.write('집에 가고 싶다ㅏㅏㅏㅏㅏㅏ')
 st.write('https://naver.com')
 st.link_button('네이버 바로가기', 'https://naver.com')
