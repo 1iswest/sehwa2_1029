@@ -4,9 +4,6 @@ import plotly.express as px
 import io
 import requests
 
-# -----------------------------
-# 페이지 설정
-# -----------------------------
 st.set_page_config(page_title="독거노인 대비 의료기관 분포 분석", layout="wide")
 st.title("🏥 지역별 독거노인 인구 대비 의료기관 분포 분석")
 
@@ -16,9 +13,9 @@ st.markdown("""
 """)
 
 # -----------------------------
-# 📂 파일 업로드
+# 📁 파일 업로드
 # -----------------------------
-st.sidebar.header("📁 데이터 업로드")
+st.sidebar.header("📂 데이터 업로드")
 elder_file = st.sidebar.file_uploader("독거노인 인구 파일 (CSV 또는 XLSX)", type=["csv", "xlsx"])
 facility_file = st.sidebar.file_uploader("의료기관 데이터 파일 (CSV 또는 XLSX)", type=["csv", "xlsx"])
 
@@ -74,7 +71,7 @@ if df_elder is not None and df_facility is not None:
     # 의료기관 수 계산
     df_facility_grouped = df_facility.groupby("지역").size().reset_index(name="의료기관_수")
 
-    # 독거노인 인구 컬럼 자동 탐색
+    # 독거노인 인구 컬럼 탐색
     target_col = None
     for c in df_elder.columns:
         if "독거" in c and ("비율" in c or "인구" in c):
@@ -87,13 +84,34 @@ if df_elder is not None and df_facility is not None:
     df = pd.merge(df_elder, df_facility_grouped, on="지역", how="inner")
 
     # -----------------------------
-    # 🔢 숫자형 변환 (TypeError 방지)
+    # 🗺️ 시도명 공식 매핑
     # -----------------------------
-    df[target_col] = pd.to_numeric(df[target_col], errors='coerce').fillna(0)
-    df["의료기관_비율"] = df["의료기관_수"] / (df[target_col] + 1e-9)
+    name_mapping = {
+        "서울": "서울특별시",
+        "부산": "부산광역시",
+        "대구": "대구광역시",
+        "인천": "인천광역시",
+        "광주": "광주광역시",
+        "대전": "대전광역시",
+        "울산": "울산광역시",
+        "세종": "세종특별자치시",
+        "경기": "경기도",
+        "강원": "강원도",
+        "충북": "충청북도",
+        "충남": "충청남도",
+        "전북": "전라북도",
+        "전남": "전라남도",
+        "경북": "경상북도",
+        "경남": "경상남도",
+        "제주": "제주특별자치도"
+    }
+    df["지역_공식"] = df["지역"].map(name_mapping).fillna(df["지역"])
 
-    st.subheader("📈 병합 결과 데이터")
-    st.dataframe(df[["지역", target_col, "의료기관_수", "의료기관_비율"]])
+    # 의료기관 비율 계산
+    df["의료기관_비율"] = df["의료기관_수"] / (df[target_col].astype(float) + 1e-9)
+
+    st.subheader("📈 병합 및 계산 결과 데이터")
+    st.dataframe(df[["지역_공식", target_col, "의료기관_수", "의료기관_비율"]])
 
     # -----------------------------
     # 🗺️ 지도 시각화
@@ -104,7 +122,7 @@ if df_elder is not None and df_facility is not None:
     fig = px.choropleth(
         df,
         geojson=geojson,
-        locations="지역",
+        locations="지역_공식",
         featureidkey="properties.name",
         color="의료기관_비율",
         color_continuous_scale="YlOrRd",
