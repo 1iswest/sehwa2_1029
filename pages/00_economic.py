@@ -62,12 +62,16 @@ if df_elder is not None and df_facility is not None:
     elder_region = elder_region_col[0] if elder_region_col else st.selectbox("독거노인 지역 컬럼 선택", df_elder.columns)
     facility_region = facility_region_col[0] if facility_region_col else st.selectbox("의료기관 지역 컬럼 선택", df_facility.columns)
 
+    # -----------------------------
+    # 🧹 데이터 전처리
+    # -----------------------------
     df_elder["지역"] = df_elder[elder_region].astype(str).str[:2]
     df_facility["지역"] = df_facility[facility_region].astype(str).str[:2]
 
-    # -----------------------------
-    # 🧹 독거노인 컬럼 탐색 및 안전 숫자 변환
-    # -----------------------------
+    # 의료기관 수 계산
+    df_facility_grouped = df_facility.groupby("지역").size().reset_index(name="의료기관_수")
+
+    # 독거노인 인구 컬럼 탐색
     target_col = None
     for c in df_elder.columns:
         if "독거" in c and ("비율" in c or "인구" in c):
@@ -76,18 +80,11 @@ if df_elder is not None and df_facility is not None:
     if target_col is None:
         target_col = st.selectbox("독거노인 인구 컬럼 선택", df_elder.columns)
 
-    # 숫자 변환: 쉼표, % 제거, NaN -> 0
-    df_elder[target_col] = pd.to_numeric(
-        df_elder[target_col].astype(str).str.replace(",", "").str.replace("%", "").str.strip(),
-        errors="coerce"
-    ).fillna(0)
+    # 숫자 변환 안전 처리
+    df_elder[target_col] = pd.to_numeric(df_elder[target_col], errors='coerce').fillna(0)
 
-    # -----------------------------
-    # 🏥 의료기관 수 계산 및 병합
-    # -----------------------------
-    df_facility_grouped = df_facility.groupby("지역").size().reset_index(name="의료기관_수")
+    # 병합
     df = pd.merge(df_elder, df_facility_grouped, on="지역", how="inner")
-
     df["의료기관_비율"] = df["의료기관_수"] / (df[target_col] + 1e-9)
 
     st.subheader("📈 병합 결과 데이터")
