@@ -1,33 +1,33 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import json
 import requests
 
 st.set_page_config(page_title="지역별 독거노인 대비 시설 지도 분석", layout="wide")
 st.title("지역별 독거노인 대비 병원·약국·복지시설 지도 분석")
 st.markdown("""
-업로드한 두 개의 CSV 데이터를 기반으로, 각 지역별 독거노인 인구 대비 병원/약국/복지시설 분포를 지도 위 색상으로 확인할 수 있습니다.
+업로드한 독거노인 Excel 파일과 의료기관/복지시설 CSV 데이터를 기반으로, 각 지역별 독거노인 인구 대비 병원/약국/복지시설 분포를 지도 위 색상으로 확인할 수 있습니다.
 """)
 
 # 파일 업로드
-st.sidebar.header("CSV 파일 업로드")
-elder_file = st.sidebar.file_uploader("독거노인 인구 CSV 파일 선택", type=["csv"])
-facility_file = st.sidebar.file_uploader("의료기관/복지시설 CSV 파일 선택", type=["csv"])
+st.sidebar.header("파일 업로드")
+elder_file = st.sidebar.file_uploader("독거노인 인구 Excel 파일 선택 (.xlsx)", type=["xlsx"])
+facility_file = st.sidebar.file_uploader("의료기관/복지시설 CSV 파일 선택 (.csv)", type=["csv"])
 
 if elder_file is not None and facility_file is not None:
     try:
-        # 인코딩 처리
+        # 독거노인 Excel 파일 읽기
         try:
-            df_elder = pd.read_csv(elder_file, encoding='utf-8')
-        except UnicodeDecodeError:
-            df_elder = pd.read_csv(elder_file, encoding='cp949')
+            df_elder = pd.read_excel(elder_file)
+        except Exception as e:
+            st.error(f"독거노인 파일 처리 중 오류 발생: {e}")
 
+        # 시설 CSV 파일 읽기 (인코딩 처리)
         try:
             df_facility = pd.read_csv(facility_file, encoding='utf-8')
         except UnicodeDecodeError:
             df_facility = pd.read_csv(facility_file, encoding='cp949')
-
+        
         st.success("두 파일 모두 업로드 성공!")
         
         st.subheader("독거노인 데이터 미리보기")
@@ -40,9 +40,9 @@ if elder_file is not None and facility_file is not None:
         expected_facility = ["지역", "병원_수", "약국_수", "복지시설_수"]
 
         if not all(col in df_elder.columns for col in expected_elder):
-            st.error(f"독거노인 CSV에는 다음 컬럼이 필요합니다: {expected_elder}")
+            st.error(f"독거노인 Excel 파일에는 다음 컬럼이 필요합니다: {expected_elder}")
         elif not all(col in df_facility.columns for col in expected_facility):
-            st.error(f"시설 CSV에는 다음 컬럼이 필요합니다: {expected_facility}")
+            st.error(f"시설 CSV 파일에는 다음 컬럼이 필요합니다: {expected_facility}")
         else:
             # 두 파일 병합
             df = pd.merge(df_elder, df_facility, on="지역")
@@ -56,7 +56,7 @@ if elder_file is not None and facility_file is not None:
             st.dataframe(df[["지역", "독거노인_인구수", "병원_수", "약국_수", "복지시설_수",
                              "병원_비율", "약국_비율", "복지시설_비율"]])
 
-            # 시설 선택
+            # 시각화할 시설 선택
             facility_option = st.selectbox("시각화할 시설 선택", ["병원_비율", "약국_비율", "복지시설_비율"])
 
             # 한국 시군구 GeoJSON 로드
@@ -80,4 +80,4 @@ if elder_file is not None and facility_file is not None:
     except Exception as e:
         st.error(f"파일 처리 중 오류 발생: {e}")
 else:
-    st.info("두 개의 CSV 파일을 모두 업로드해야 분석을 시작할 수 있습니다.")
+    st.info("독거노인 Excel 파일과 시설 CSV 파일을 모두 업로드해야 분석을 시작할 수 있습니다.")
