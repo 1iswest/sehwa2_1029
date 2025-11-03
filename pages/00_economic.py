@@ -13,7 +13,7 @@ st.markdown("""
 """)
 
 # -----------------------------
-# 📁 데이터 업로드
+# 📂 데이터 업로드
 # -----------------------------
 st.sidebar.header("📂 데이터 업로드")
 elder_file = st.sidebar.file_uploader("독거노인 인구 파일 (CSV 또는 XLSX)", type=["csv", "xlsx"])
@@ -84,11 +84,9 @@ if df_elder is not None and df_facility is not None:
     # 🛡 안전한 숫자 변환
     # -----------------------------
     df_elder[target_col] = pd.to_numeric(
-        df_elder[target_col].astype(str)
-                    .str.replace(",", "")
-                    .str.replace(" ", ""),
-        errors="coerce"
-    ).fillna(0)
+        df_elder[target_col].astype(str).str.replace(",", "").str.strip(),
+        errors="coerce"  # 변환 불가 값은 NaN
+    ).fillna(0)  # NaN → 0
 
     # -----------------------------
     # 🔗 데이터 병합
@@ -105,8 +103,15 @@ if df_elder is not None and df_facility is not None:
     geojson_url = "https://raw.githubusercontent.com/southkorea/southkorea-maps/master/kostat/2013/json/skorea_provinces_geo_simple.json"
     geojson = requests.get(geojson_url).json()
 
-    # 시도 이름 맞춤 처리 (skorea_provinces_geo_simple.json의 'name'과 일치)
-    # 예: '서울' -> '서울특별시' 등 필요시 여기서 매핑 가능
+    # 필요시 지역 이름 매핑
+    # ex: '서울' -> '서울특별시', '부산' -> '부산광역시', 등
+    region_mapping = {
+        "서울": "서울", "부산": "부산", "대구": "대구", "인천": "인천",
+        "광주": "광주", "대전": "대전", "울산": "울산", "세종": "세종",
+        "경기": "경기", "강원": "강원", "충북": "충북", "충남": "충남",
+        "전북": "전북", "전남": "전남", "경북": "경북", "경남": "경남", "제주": "제주"
+    }
+    df["지역"] = df["지역"].map(region_mapping)
 
     fig = px.choropleth(
         df,
