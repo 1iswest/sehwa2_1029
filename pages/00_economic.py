@@ -81,11 +81,11 @@ if df_elder is not None and df_facility is not None:
         target_col = st.selectbox("독거노인 인구 컬럼 선택", df_elder.columns)
 
     # -----------------------------
-    # 🛡 안전한 숫자 변환
+    # 🔢 숫자 변환 안전 처리
     # -----------------------------
     df_elder[target_col] = pd.to_numeric(
         df_elder[target_col].astype(str).str.replace(",", "").str.strip(),
-        errors="coerce"  # 변환 불가 값은 NaN
+        errors="coerce"  # 숫자로 변환 불가 값은 NaN
     ).fillna(0)  # NaN → 0
 
     # -----------------------------
@@ -103,8 +103,7 @@ if df_elder is not None and df_facility is not None:
     geojson_url = "https://raw.githubusercontent.com/southkorea/southkorea-maps/master/kostat/2013/json/skorea_provinces_geo_simple.json"
     geojson = requests.get(geojson_url).json()
 
-    # 필요시 지역 이름 매핑
-    # ex: '서울' -> '서울특별시', '부산' -> '부산광역시', 등
+    # 시도 이름 맞춤
     region_mapping = {
         "서울": "서울", "부산": "부산", "대구": "대구", "인천": "인천",
         "광주": "광주", "대전": "대전", "울산": "울산", "세종": "세종",
