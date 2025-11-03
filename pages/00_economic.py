@@ -13,9 +13,9 @@ st.markdown("""
 """)
 
 # -----------------------------
-# 📂 파일 업로드
+# 📁 데이터 업로드
 # -----------------------------
-st.sidebar.header("📁 데이터 업로드")
+st.sidebar.header("📂 데이터 업로드")
 elder_file = st.sidebar.file_uploader("독거노인 인구 파일 (CSV 또는 XLSX)", type=["csv", "xlsx"])
 facility_file = st.sidebar.file_uploader("의료기관 데이터 파일 (CSV 또는 XLSX)", type=["csv", "xlsx"])
 
@@ -65,7 +65,6 @@ if df_elder is not None and df_facility is not None:
     # -----------------------------
     # 🧹 데이터 전처리
     # -----------------------------
-    # 시도 단위로 통일
     df_elder["지역"] = df_elder[elder_region].astype(str).str[:2]
     df_facility["지역"] = df_facility[facility_region].astype(str).str[:2]
 
@@ -81,14 +80,18 @@ if df_elder is not None and df_facility is not None:
     if target_col is None:
         target_col = st.selectbox("독거노인 인구 컬럼 선택", df_elder.columns)
 
-    # 숫자형으로 변환 (쉼표 제거, 문자/NaN 처리)
+    # -----------------------------
+    # 🛡 안전한 숫자 변환
+    # -----------------------------
     df_elder[target_col] = pd.to_numeric(
-        df_elder[target_col].astype(str).str.replace(",", "").str.replace(" ", ""),
+        df_elder[target_col].astype(str)
+                    .str.replace(",", "")
+                    .str.replace(" ", ""),
         errors="coerce"
     ).fillna(0)
 
     # -----------------------------
-    # 🔗 병합
+    # 🔗 데이터 병합
     # -----------------------------
     df = pd.merge(df_elder, df_facility_grouped, on="지역", how="inner")
     df["의료기관_비율"] = df["의료기관_수"] / (df[target_col] + 1e-9)
@@ -97,25 +100,18 @@ if df_elder is not None and df_facility is not None:
     st.dataframe(df[["지역", target_col, "의료기관_수", "의료기관_비율"]])
 
     # -----------------------------
-    # 🗺️ 지도 시각화
+    # 🗺 지도 시각화
     # -----------------------------
     geojson_url = "https://raw.githubusercontent.com/southkorea/southkorea-maps/master/kostat/2013/json/skorea_provinces_geo_simple.json"
     geojson = requests.get(geojson_url).json()
 
-    # 시도 이름 매칭용
-    df["지역_매칭"] = df["지역"].replace({
-        "서울": "서울특별시", "부산": "부산광역시", "대구": "대구광역시",
-        "인천": "인천광역시", "광주": "광주광역시", "대전": "대전광역시",
-        "울산": "울산광역시", "세종": "세종특별자치시",
-        "경기": "경기도", "강원": "강원도", "충북": "충청북도", "충남": "충청남도",
-        "전북": "전라북도", "전남": "전라남도", "경북": "경상북도",
-        "경남": "경상남도", "제주": "제주특별자치도"
-    })
+    # 시도 이름 맞춤 처리 (skorea_provinces_geo_simple.json의 'name'과 일치)
+    # 예: '서울' -> '서울특별시' 등 필요시 여기서 매핑 가능
 
     fig = px.choropleth(
         df,
         geojson=geojson,
-        locations="지역_매칭",
+        locations="지역",
         featureidkey="properties.name",
         color="의료기관_비율",
         color_continuous_scale="YlOrRd",
