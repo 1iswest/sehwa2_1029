@@ -13,14 +13,14 @@ st.markdown("""
 """)
 
 # -----------------------------
-# 📂 파일 업로드
+# 파일 업로드
 # -----------------------------
 st.sidebar.header("📁 데이터 업로드")
 elder_file = st.sidebar.file_uploader("독거노인 인구 파일 (CSV 또는 XLSX)", type=["csv", "xlsx"])
 facility_file = st.sidebar.file_uploader("의료기관 데이터 파일 (CSV 또는 XLSX)", type=["csv", "xlsx"])
 
 # -----------------------------
-# 🔍 파일 읽기 함수
+# 파일 읽기 함수
 # -----------------------------
 def read_any(file):
     if file is None:
@@ -39,7 +39,7 @@ def read_any(file):
         return None
 
 # -----------------------------
-# 📊 파일 로드
+# 파일 로드
 # -----------------------------
 df_elder = read_any(elder_file)
 df_facility = read_any(facility_file)
@@ -54,7 +54,7 @@ if df_elder is not None and df_facility is not None:
     st.dataframe(df_facility.head())
 
     # -----------------------------
-    # 🔠 지역 컬럼 자동 인식
+    # 지역 컬럼 자동 인식
     # -----------------------------
     elder_region_col = [c for c in df_elder.columns if "시도" in c or "지역" in c or "행정구역" in c]
     facility_region_col = [c for c in df_facility.columns if "시도" in c or "주소" in c or "지역" in c]
@@ -63,7 +63,7 @@ if df_elder is not None and df_facility is not None:
     facility_region = facility_region_col[0] if facility_region_col else st.selectbox("의료기관 지역 컬럼 선택", df_facility.columns)
 
     # -----------------------------
-    # 🧹 데이터 전처리
+    # 데이터 전처리
     # -----------------------------
     df_elder["지역"] = df_elder[elder_region].astype(str).str[:2]
     df_facility["지역"] = df_facility[facility_region].astype(str).str[:2]
@@ -85,19 +85,23 @@ if df_elder is not None and df_facility is not None:
 
     # 병합
     df = pd.merge(df_elder, df_facility_grouped, on="지역", how="inner")
-    df["의료기관_비율"] = df["의료기관_수"] / (df[target_col] + 1e-9)
+    df["의료기관_비율"] = df["의료기관_수"] / (df[target_col].replace(0, 1) + 1e-9)  # 0 나누기 방지
 
     st.subheader("📈 병합 결과 데이터")
     st.dataframe(df[["지역", target_col, "의료기관_수", "의료기관_비율"]])
 
     # -----------------------------
-    # 🗺️ 지도 시각화
+    # 지도 시각화
     # -----------------------------
     geojson_url = "https://raw.githubusercontent.com/southkorea/southkorea-maps/master/kostat/2013/json/skorea_provinces_geo_simple.json"
     geojson = requests.get(geojson_url).json()
 
+    # 지역 이름 매칭: skorea_provinces_geo_simple.json 의 properties.name는 '서울','부산' 등
+    df_plot = df.copy()
+    df_plot["지역"] = df_plot["지역"].str.replace(" ", "")
+
     fig = px.choropleth(
-        df,
+        df_plot,
         geojson=geojson,
         locations="지역",
         featureidkey="properties.name",
