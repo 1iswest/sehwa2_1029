@@ -1,8 +1,6 @@
+streamlit
 pandas
 numpy
-matplotlib
-scipy
-folium
-streamlit-folium
-shapely
-geopandas
+plotly
+requests
+openpyxl
