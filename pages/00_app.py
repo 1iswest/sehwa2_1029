@@ -55,50 +55,46 @@ df_facility = read_any(facility_file)
 # -----------------------------
 if df_elder is not None and df_facility is not None:
     st.success(" 두 파일 모두 업로드 완료!")
+    
+    # -----------------------------
+    # 1. 독거노인 데이터 헤더/컬럼 전처리
+    # -----------------------------
+    # 헤더 병합 로직 강화 (KOSIS 파일 구조 대응)
+    if '행정구역별' in df_elder.columns and '2024' in df_elder.columns:
+        # 두 줄 헤더 병합: 두 번째 행을 새 컬럼명으로 사용
+        df_elder.columns = df_elder.iloc[0]
+        df_elder = df_elder[1:].reset_index(drop=True)
+        # 컬럼 이름 재정의 및 불필요한 공백 제거
+        df_elder.columns = [col.strip() for col in df_elder.columns]
+
+    # 지역 컬럼 이름 찾기 및 통일
+    elder_region_col_candidates = [c for c in df_elder.columns if "시도" in c or "지역" in c or "행정구역" in c]
+    elder_region = elder_region_col_candidates[0] if elder_region_col_candidates else st.selectbox("독거노인 지역 컬럼 선택", df_elder.columns, key="elder_region_sel")
+    df_elder = df_elder.rename(columns={elder_region: '지역'})
+
+    # 인구 컬럼 자동/수동 선택
+    target_col_candidates = [c for c in df_elder.columns if '1인가구' in c and '65세이상' in c]
+    if target_col_candidates:
+        target_col = target_col_candidates[0]
+    else:
+        st.warning("독거노인 인구 컬럼을 자동으로 찾을 수 없습니다. 아래에서 직접 선택해주세요.")
+        target_col = st.selectbox("독거노인 인구 컬럼 선택", df_elder.columns, key="target_col_sel")
+
+    # 독거노인 데이터의 '전국' 행 제거 및 지역이 NaN인 행 제거
+    df_elder = df_elder[df_elder['지역'].astype(str) != '전국']
+    df_elder = df_elder.dropna(subset=['지역'])
 
     # -----------------------------
-    # 데이터 전처리: 독거노인 데이터 (df_elder) 헤더 및 컬럼 탐색
+    # 2. 의료기관 데이터 전처리
     # -----------------------------
-    target_col = None
-    try:
-        # 두 줄 헤더 문제를 해결하기 위해 첫 번째 행을 컬럼명으로 사용
-        if df_elder.columns[0] == '행정구역별' and '2024' in df_elder.columns:
-            df_elder.columns = df_elder.iloc[0] # 첫 번째 데이터 행을 새 컬럼으로 지정
-            df_elder = df_elder[1:].reset_index(drop=True) # 그 행을 제외하고 데이터 시작
-
-        # 컬럼 이름 재설정 및 독거노인 인구 컬럼 탐색
-        if '행정구역별' in df_elder.columns:
-            df_elder = df_elder.rename(columns={'행정구역별': '지역'})
-        
-        target_col_candidates = [c for c in df_elder.columns if '1인가구' in c and '65세이상' in c]
-        if target_col_candidates:
-            target_col = target_col_candidates[0]
-        else:
-            # 자동 탐색 실패 시 수동 선택 (Streamlit 환경에서 사용자 입력 대기)
-            st.error("독거노인 인구 컬럼을 자동으로 찾을 수 없습니다. 수동 선택을 진행합니다.")
-            elder_region_col = [c for c in df_elder.columns if "시도" in c or "지역" in c or "행정구역" in c]
-            elder_region = elder_region_col[0] if elder_region_col else st.selectbox("독거노인 지역 컬럼 선택", df_elder.columns)
-            df_elder = df_elder.rename(columns={elder_region: '지역'})
-            target_col = st.selectbox("독거노인 인구 컬럼 선택", df_elder.columns)
-            
-        # 독거노인 데이터의 '전국' 행 제거
-        df_elder = df_elder[df_elder['지역'] != '전국']
-        df_elder = df_elder.dropna(subset=['지역']) # 지역이 NaN인 행 제거
-        
-    except Exception as e:
-        st.error(f"독거노인 데이터(df_elder) 전처리 오류: {e}")
-
-    # -----------------------------
-    # 데이터 전처리: 의료기관 데이터 (df_facility)
-    # -----------------------------
-    facility_region_col = [c for c in df_facility.columns if "시도" in c or "주소" in c or "지역" in c or "소재지전체주소" in c]
-    facility_region = facility_region_col[0] if facility_region_col else st.selectbox("의료기관 지역 컬럼 선택", df_facility.columns)
+    facility_region_col_candidates = [c for c in df_facility.columns if "시도" in c or "주소" in c or "지역" in c or "소재지전체주소" in c]
+    facility_region = facility_region_col_candidates[0] if facility_region_col_candidates else st.selectbox("의료기관 지역 컬럼 선택", df_facility.columns, key="facility_region_sel")
     
     # 주소 컬럼에서 시/도 추출
     df_facility["지역"] = df_facility[facility_region].astype(str).str[:2]
 
     # -----------------------------
-    # 지역명 자동 변환 (GeoJSON 매칭 보정)
+    # 3. 지역명 자동 변환 (GeoJSON 매칭 보정)
     # -----------------------------
     def normalize_region(name):
         name = str(name).strip()
@@ -116,3 +112,57 @@ if df_elder is not None and df_facility is not None:
 
     df_elder["지역"] = df_elder["지역"].apply(normalize_region)
     df_facility["지역"] = df_facility["지역"].apply(normalize_region)
+
+    # -----------------------------
+    # 4. 미리보기 및 시각화
+    # -----------------------------
+    st.subheader(" 독거노인 인구 데이터 미리보기")
+    st.dataframe(df_elder.head())
+
+    st.subheader(" 의료기관 데이터 미리보기")
+    st.dataframe(df_facility.head())
+
+    if target_col is not None and target_col in df_elder.columns:
+        # 의료기관 수 계산 및 병합
+        df_facility_grouped = df_facility.groupby("지역").size().reset_index(name="의료기관_수")
+
+        # 독거노인 인구 컬럼 수치형으로 변환 (오류 발생 시 0으로 처리)
+        df_elder[target_col] = pd.to_numeric(df_elder[target_col], errors='coerce').fillna(0)
+        
+        # 병합
+        df = pd.merge(df_elder, df_facility_grouped, on="지역", how="inner")
+
+        # 비율 계산 (독거노인 1000명당 의료기관 수)
+        df["의료기관_비율"] = (df["의료기관_수"] / (df[target_col].replace(0, 1) + 1e-9)) * 1000
+        df = df.rename(columns={"의료기관_비율": "독거노인_1000명당_의료기관_수"})
+
+        st.subheader(" 병합 결과 데이터")
+        st.dataframe(df[["지역", target_col, "의료기관_수", "독거노인_1000명당_의료기관_수"]])
+
+        # -----------------------------
+        # 지도 시각화
+        # -----------------------------
+        geojson_url = "https://raw.githubusercontent.com/southkorea/southkorea-maps/master/kostat/2013/json/skorea_provinces_geo_simple.json"
+        geojson = requests.get(geojson_url).json()
+
+        # GeoJSON 명칭 보정
+        for feature in geojson['features']:
+            if feature['properties']['name'] == '강원도':
+                feature['properties']['name'] = '강원특별자치도'
+            if feature['properties']['name'] == '전라북도':
+                feature['properties']['name'] = '전북특별자치도'
+
+        fig = px.choropleth(
+            df,
+            geojson=geojson,
+            locations="지역",
+            featureidkey="properties.name",
+            color="독거노인_1000명당_의료기관_수",
+            color_continuous_scale="RdYlGn", 
+            title="시도별 독거노인 **1000명당** 의료기관 분포", 
+            range_color=(df["독거노인_1000명당_의료기관_수"].min(), df["독거노인_1000명당_의료기관_수"].max()),
+            hover_data={
+                "지역": True, 
+                target_col: True, 
+                "의료기관_수": True,
+                "독거노인_1000명
