@@ -14,8 +14,8 @@ st.markdown("""
 이 앱은 **지역별 독거노인 인구수**와 **의료기관 수**를 비교하여
 얼마나 고르게 분포되어 있는지를 지도 위에서 시각화합니다.
 
-- **빨간색**: 독거노인 인구 대비 의료기관이 **부족한 지역**
-- **초록색**: 독거노인 인구 대비 의료기관이 **많은 지역**
+- **빨간색**: 독거노인 인구 대비 의료기관이 **부족한 지역** (전국 평균보다 낮음)
+- **초록색**: 독거노인 인구 대비 의료기관이 **많은 지역** (전국 평균보다 높음)
 """)
 
 # -----------------------------
@@ -74,7 +74,6 @@ if df_elder is not None and df_facility is not None:
         df_elder = df_elder.rename(columns={elder_region_col_candidates[0]: '지역'})
     else:
         st.warning("독거노인 지역 컬럼을 자동으로 찾을 수 없습니다. 아래에서 직접 선택해주세요.")
-        # Streamlit 앱 실행 중인 경우 사용자에게 선택권을 줌
         elder_region = st.selectbox("독거노인 지역 컬럼 선택", df_elder.columns, key="elder_region_sel")
         df_elder = df_elder.rename(columns={elder_region: '지역'})
 
@@ -142,6 +141,11 @@ if df_elder is not None and df_facility is not None:
         # 비율 계산 (독거노인 1000명당 의료기관 수)
         df["의료기관_비율"] = (df["의료기관_수"] / (df[target_col].replace(0, 1) + 1e-9)) * 1000
         df = df.rename(columns={"의료기관_비율": "독거노인_1000명당_의료기관_수"})
+        
+        # -----------------------------
+        # 지도 시각화를 위한 전국 평균 계산
+        # -----------------------------
+        mean_ratio = df["독거노인_1000명당_의료기관_수"].mean()
 
         st.subheader(" 병합 결과 데이터")
         st.dataframe(df[["지역", target_col, "의료기관_수", "독거노인_1000명당_의료기관_수"]])
@@ -165,14 +169,15 @@ if df_elder is not None and df_facility is not None:
             locations="지역",
             featureidkey="properties.name",
             color="독거노인_1000명당_의료기관_수",
+            # ⭐ 전국 평균을 색상 척도의 중앙값(노란색)으로 설정하여, 기준을 명확히 함
             color_continuous_scale="RdYlGn", 
-            title="시도별 독거노인 **1000명당** 의료기관 분포", 
+            color_continuous_midpoint=mean_ratio,
+            title=f"시도별 독거노인 **1000명당** 의료기관 분포 (전국 평균: {mean_ratio:.2f})", 
             range_color=(df["독거노인_1000명당_의료기관_수"].min(), df["독거노인_1000명당_의료기관_수"].max()),
             hover_data={
                 "지역": True, 
                 target_col: True, 
                 "의료기관_수": True,
-                # 이 부분이 168번째 줄 근처입니다. 따옴표가 확실히 닫혀 있습니다.
                 "독거노인_1000명당_의료기관_수": ':.2f' 
             }
         )
