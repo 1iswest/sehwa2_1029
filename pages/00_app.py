@@ -39,6 +39,7 @@ def read_any(file):
             except UnicodeDecodeError:
                 return pd.read_csv(io.BytesIO(raw), encoding="cp949")
         elif file.name.endswith(".xlsx"):
+            # read_excel의 기본 동작은 첫 번째 시트를 읽습니다.
             return pd.read_excel(file)
     except Exception as e:
         st.error(f"파일 읽기 오류: {e}")
@@ -59,18 +60,24 @@ if df_elder is not None and df_facility is not None:
     # -----------------------------
     # 1. 독거노인 데이터 헤더/컬럼 전처리
     # -----------------------------
-    # 헤더 병합 로직 강화 (KOSIS 파일 구조 대응)
+    target_col = None
+
+    # 헤더 병합 로직 (KOSIS 파일 구조 대응)
     if '행정구역별' in df_elder.columns and '2024' in df_elder.columns:
-        # 두 줄 헤더 병합: 두 번째 행을 새 컬럼명으로 사용
         df_elder.columns = df_elder.iloc[0]
         df_elder = df_elder[1:].reset_index(drop=True)
-        # 컬럼 이름 재정의 및 불필요한 공백 제거
         df_elder.columns = [col.strip() for col in df_elder.columns]
 
     # 지역 컬럼 이름 찾기 및 통일
     elder_region_col_candidates = [c for c in df_elder.columns if "시도" in c or "지역" in c or "행정구역" in c]
-    elder_region = elder_region_col_candidates[0] if elder_region_col_candidates else st.selectbox("독거노인 지역 컬럼 선택", df_elder.columns, key="elder_region_sel")
-    df_elder = df_elder.rename(columns={elder_region: '지역'})
+    if elder_region_col_candidates:
+        df_elder = df_elder.rename(columns={elder_region_col_candidates[0]: '지역'})
+    else:
+        st.warning("독거노인 지역 컬럼을 자동으로 찾을 수 없습니다. 아래에서 직접 선택해주세요.")
+        # Streamlit 앱 실행 중인 경우 사용자에게 선택권을 줌
+        elder_region = st.selectbox("독거노인 지역 컬럼 선택", df_elder.columns, key="elder_region_sel")
+        df_elder = df_elder.rename(columns={elder_region: '지역'})
+
 
     # 인구 컬럼 자동/수동 선택
     target_col_candidates = [c for c in df_elder.columns if '1인가구' in c and '65세이상' in c]
@@ -126,7 +133,7 @@ if df_elder is not None and df_facility is not None:
         # 의료기관 수 계산 및 병합
         df_facility_grouped = df_facility.groupby("지역").size().reset_index(name="의료기관_수")
 
-        # 독거노인 인구 컬럼 수치형으로 변환 (오류 발생 시 0으로 처리)
+        # 독거노인 인구 컬럼 수치형으로 변환
         df_elder[target_col] = pd.to_numeric(df_elder[target_col], errors='coerce').fillna(0)
         
         # 병합
@@ -165,4 +172,20 @@ if df_elder is not None and df_facility is not None:
                 "지역": True, 
                 target_col: True, 
                 "의료기관_수": True,
-                "독거노인_1000명
+                # 이 부분이 168번째 줄 근처입니다. 따옴표가 확실히 닫혀 있습니다.
+                "독거노인_1000명당_의료기관_수": ':.2f' 
+            }
+        )
+
+        fig.update_geos(
+            fitbounds="locations",
+            visible=False,
+            bgcolor="#f5f5f5"
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.error("독거노인 인구 컬럼이 설정되지 않아 비율 계산 및 시각화를 진행할 수 없습니다. 데이터 구조를 확인하거나 위에서 컬럼을 직접 선택해 주세요.")
+
+else:
+    st.info(" 사이드바에서 두 개의 파일을 모두 업로드해주세요.")
