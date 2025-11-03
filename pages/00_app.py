@@ -51,14 +51,15 @@ df_elder = read_any(elder_file)
 df_facility = read_any(facility_file)
 
 # -----------------------------
-# *핵심 수정: 모든 데이터 처리는 파일 로드 확인 후 진행되어야 합니다.*
+# 데이터 처리 (파일 로드 확인 후 실행)
 # -----------------------------
 if df_elder is not None and df_facility is not None:
     st.success(" 두 파일 모두 업로드 완료!")
 
     # -----------------------------
-    # 데이터 전처리: 독거노인 데이터 (df_elder) 헤더 문제 해결
+    # 데이터 전처리: 독거노인 데이터 (df_elder) 헤더 및 컬럼 탐색
     # -----------------------------
+    target_col = None
     try:
         # 두 줄 헤더 문제를 해결하기 위해 첫 번째 행을 컬럼명으로 사용
         if df_elder.columns[0] == '행정구역별' and '2024' in df_elder.columns:
@@ -73,7 +74,11 @@ if df_elder is not None and df_facility is not None:
         if target_col_candidates:
             target_col = target_col_candidates[0]
         else:
-            # 자동 탐색 실패 시 기본 설정
+            # 자동 탐색 실패 시 수동 선택 (Streamlit 환경에서 사용자 입력 대기)
+            st.error("독거노인 인구 컬럼을 자동으로 찾을 수 없습니다. 수동 선택을 진행합니다.")
+            elder_region_col = [c for c in df_elder.columns if "시도" in c or "지역" in c or "행정구역" in c]
+            elder_region = elder_region_col[0] if elder_region_col else st.selectbox("독거노인 지역 컬럼 선택", df_elder.columns)
+            df_elder = df_elder.rename(columns={elder_region: '지역'})
             target_col = st.selectbox("독거노인 인구 컬럼 선택", df_elder.columns)
             
         # 독거노인 데이터의 '전국' 행 제거
@@ -82,7 +87,6 @@ if df_elder is not None and df_facility is not None:
         
     except Exception as e:
         st.error(f"독거노인 데이터(df_elder) 전처리 오류: {e}")
-        target_col = None # 오류 발생 시 None 처리
 
     # -----------------------------
     # 데이터 전처리: 의료기관 데이터 (df_facility)
@@ -112,41 +116,3 @@ if df_elder is not None and df_facility is not None:
 
     df_elder["지역"] = df_elder["지역"].apply(normalize_region)
     df_facility["지역"] = df_facility["지역"].apply(normalize_region)
-
-    st.subheader(" 독거노인 인구 데이터 미리보기")
-    st.dataframe(df_elder.head())
-
-    st.subheader(" 의료기관 데이터 미리보기")
-    st.dataframe(df_facility.head())
-
-    # -----------------------------
-    # 의료기관 수 계산 및 병합
-    # -----------------------------
-    
-    # 여기서 df_facility_grouped가 정의됩니다.
-    df_facility_grouped = df_facility.groupby("지역").size().reset_index(name="의료기관_수")
-
-    # 독거노인 인구 컬럼 수치형으로 변환
-    if target_col is not None:
-        df_elder[target_col] = pd.to_numeric(df_elder[target_col], errors='coerce').fillna(0)
-    else:
-        st.error("독거노인 인구 컬럼이 설정되지 않아 비율 계산을 건너뜁니다.")
-
-    # 병합
-    df = pd.merge(df_elder, df_facility_grouped, on="지역", how="inner")
-
-    # *********************************
-    # 비율 계산 (독거노인 1000명당 의료기관 수)
-    # *********************************
-    if target_col is not None:
-        # 독거노인 1000명당 의료기관 수 = (의료기관 수 / 독거노인 수) * 1000
-        df["의료기관_비율"] = (df["의료기관_수"] / (df[target_col].replace(0, 1) + 1e-9)) * 1000
-        df = df.rename(columns={"의료기관_비율": "독거노인_1000명당_의료기관_수"})
-
-        st.subheader(" 병합 결과 데이터")
-        st.dataframe(df[["지역", target_col, "의료기관_수", "독거노인_1000명당_의료기관_수"]])
-
-        # -----------------------------
-        # 지도 시각화
-        # -----------------------------
-        geojson_url = "
