@@ -4,6 +4,9 @@ import plotly.express as px
 import io
 import requests
 
+# -----------------------------
+# 페이지 설정
+# -----------------------------
 st.set_page_config(page_title="독거노인 대비 의료기관 분포 분석", layout="wide")
 st.title("🏥 지역별 독거노인 인구 대비 의료기관 분포 분석")
 
@@ -71,7 +74,7 @@ if df_elder is not None and df_facility is not None:
     # 의료기관 수 계산
     df_facility_grouped = df_facility.groupby("지역").size().reset_index(name="의료기관_수")
 
-    # 독거노인 인구 컬럼 탐색
+    # 독거노인 인구 컬럼 자동 탐색
     target_col = None
     for c in df_elder.columns:
         if "독거" in c and ("비율" in c or "인구" in c):
@@ -82,6 +85,11 @@ if df_elder is not None and df_facility is not None:
 
     # 병합
     df = pd.merge(df_elder, df_facility_grouped, on="지역", how="inner")
+
+    # -----------------------------
+    # 🔢 숫자형 변환 (TypeError 방지)
+    # -----------------------------
+    df[target_col] = pd.to_numeric(df[target_col], errors='coerce').fillna(0)
     df["의료기관_비율"] = df["의료기관_수"] / (df[target_col] + 1e-9)
 
     st.subheader("📈 병합 결과 데이터")
