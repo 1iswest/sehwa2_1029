@@ -1,47 +1,152 @@
-# ... (이전 코드 생략)
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+import io
+import requests
 
 # -----------------------------
-# 의료기관 수 계산 및 병합
+# 설정 및 제목
 # -----------------------------
-df_facility_grouped = df_facility.groupby("지역").size().reset_index(name="의료기관_수")
+st.set_page_config(page_title="독거노인 대비 의료기관 분포 분석", layout="wide")
+st.title(" 지역별 독거노인 인구 대비 의료기관 분포 분석")
 
-# 독거노인 인구 컬럼 수치형으로 변환
-df_elder[target_col] = pd.to_numeric(df_elder[target_col], errors='coerce').fillna(0)
+st.markdown("""
+이 앱은 **지역별 독거노인 인구수**와 **의료기관 수**를 비교하여
+얼마나 고르게 분포되어 있는지를 지도 위에서 시각화합니다.
 
-# 병합
-df = pd.merge(df_elder, df_facility_grouped, on="지역", how="inner")
-
-# *********************************
-# 비율 계산 수정 (핵심 수정: 독거노인 1000명당 의료기관 수)
-# *********************************
-# 독거노인 1000명당 의료기관 수 = (의료기관 수 / 독거노인 수) * 1000
-df["의료기관_비율"] = (df["의료기관_수"] / (df[target_col].replace(0, 1) + 1e-9)) * 1000
-df = df.rename(columns={"의료기관_비율": "독거노인_1000명당_의료기관_수"})
+- **빨간색**: 독거노인 인구 대비 의료기관이 **부족한 지역**
+- **초록색**: 독거노인 인구 대비 의료기관이 **많은 지역**
+""")
 
 # -----------------------------
-# 병합 결과 데이터 미리보기 및 지도 시각화 제목/색상 범위 수정
+# 파일 업로드
 # -----------------------------
-st.subheader(" 병합 결과 데이터")
-st.dataframe(df[["지역", target_col, "의료기관_수", "독거노인_1000명당_의료기관_수"]])
+st.sidebar.header(" 데이터 업로드")
+elder_file = st.sidebar.file_uploader("독거노인 인구 파일 (CSV 또는 XLSX)", type=["csv", "xlsx"])
+facility_file = st.sidebar.file_uploader("의료기관 데이터 파일 (CSV 또는 XLSX)", type=["csv", "xlsx"])
 
-# ... (중간 코드 생략)
+# -----------------------------
+# 파일 읽기 함수
+# -----------------------------
+def read_any(file):
+    if file is None:
+        return None
+    try:
+        if file.name.endswith(".csv"):
+            raw = file.read()
+            try:
+                return pd.read_csv(io.BytesIO(raw), encoding="utf-8")
+            except UnicodeDecodeError:
+                return pd.read_csv(io.BytesIO(raw), encoding="cp949")
+        elif file.name.endswith(".xlsx"):
+            return pd.read_excel(file)
+    except Exception as e:
+        st.error(f"파일 읽기 오류: {e}")
+        return None
 
-fig = px.choropleth(
-    df,
-    geojson=geojson,
-    locations="지역",
-    featureidkey="properties.name",
-    color="독거노인_1000명당_의료기관_수", # 수정된 컬럼명 사용
-    color_continuous_scale="RdYlGn",
-    title="시도별 독거노인 **1000명당** 의료기관 분포", # 제목 수정
-    # 비율의 최대/최소값을 사용하여 색상 범위 설정
-    range_color=(df["독거노인_1000명당_의료기관_수"].min(), df["독거노인_1000명당_의료기관_수"].max()),
-    hover_data={
-        "지역": True, 
-        target_col: True, 
-        "의료기관_수": True,
-        "독거노인_1000명당_의료기관_수": ':.2f' # 소수점 둘째 자리까지 표시
-    }
-)
+# -----------------------------
+# 파일 로드
+# -----------------------------
+df_elder = read_any(elder_file)
+df_facility = read_any(facility_file)
 
-# ... (나머지 코드 생략)
+# -----------------------------
+# *핵심 수정: 모든 데이터 처리는 파일 로드 확인 후 진행되어야 합니다.*
+# -----------------------------
+if df_elder is not None and df_facility is not None:
+    st.success(" 두 파일 모두 업로드 완료!")
+
+    # -----------------------------
+    # 데이터 전처리: 독거노인 데이터 (df_elder) 헤더 문제 해결
+    # -----------------------------
+    try:
+        # 두 줄 헤더 문제를 해결하기 위해 첫 번째 행을 컬럼명으로 사용
+        if df_elder.columns[0] == '행정구역별' and '2024' in df_elder.columns:
+            df_elder.columns = df_elder.iloc[0] # 첫 번째 데이터 행을 새 컬럼으로 지정
+            df_elder = df_elder[1:].reset_index(drop=True) # 그 행을 제외하고 데이터 시작
+
+        # 컬럼 이름 재설정 및 독거노인 인구 컬럼 탐색
+        if '행정구역별' in df_elder.columns:
+            df_elder = df_elder.rename(columns={'행정구역별': '지역'})
+        
+        target_col_candidates = [c for c in df_elder.columns if '1인가구' in c and '65세이상' in c]
+        if target_col_candidates:
+            target_col = target_col_candidates[0]
+        else:
+            # 자동 탐색 실패 시 기본 설정
+            target_col = st.selectbox("독거노인 인구 컬럼 선택", df_elder.columns)
+            
+        # 독거노인 데이터의 '전국' 행 제거
+        df_elder = df_elder[df_elder['지역'] != '전국']
+        df_elder = df_elder.dropna(subset=['지역']) # 지역이 NaN인 행 제거
+        
+    except Exception as e:
+        st.error(f"독거노인 데이터(df_elder) 전처리 오류: {e}")
+        target_col = None # 오류 발생 시 None 처리
+
+    # -----------------------------
+    # 데이터 전처리: 의료기관 데이터 (df_facility)
+    # -----------------------------
+    facility_region_col = [c for c in df_facility.columns if "시도" in c or "주소" in c or "지역" in c or "소재지전체주소" in c]
+    facility_region = facility_region_col[0] if facility_region_col else st.selectbox("의료기관 지역 컬럼 선택", df_facility.columns)
+    
+    # 주소 컬럼에서 시/도 추출
+    df_facility["지역"] = df_facility[facility_region].astype(str).str[:2]
+
+    # -----------------------------
+    # 지역명 자동 변환 (GeoJSON 매칭 보정)
+    # -----------------------------
+    def normalize_region(name):
+        name = str(name).strip()
+        mapping = {
+            "서울": "서울특별시", "부산": "부산광역시", "대구": "대구광역시", "인천": "인천광역시",
+            "광주": "광주광역시", "대전": "대전광역시", "울산": "울산광역시", "세종": "세종특별자치시",
+            "경기": "경기도", "강원": "강원특별자치도", "충북": "충청북도", "충남": "충청남도",
+            "전북": "전북특별자치도", "전남": "전라남도", "경북": "경상북도", "경남": "경상남도",
+            "제주": "제주특별자치도"
+        }
+        for key, val in mapping.items():
+            if name.startswith(key):
+                return val
+        return name
+
+    df_elder["지역"] = df_elder["지역"].apply(normalize_region)
+    df_facility["지역"] = df_facility["지역"].apply(normalize_region)
+
+    st.subheader(" 독거노인 인구 데이터 미리보기")
+    st.dataframe(df_elder.head())
+
+    st.subheader(" 의료기관 데이터 미리보기")
+    st.dataframe(df_facility.head())
+
+    # -----------------------------
+    # 의료기관 수 계산 및 병합
+    # -----------------------------
+    
+    # 여기서 df_facility_grouped가 정의됩니다.
+    df_facility_grouped = df_facility.groupby("지역").size().reset_index(name="의료기관_수")
+
+    # 독거노인 인구 컬럼 수치형으로 변환
+    if target_col is not None:
+        df_elder[target_col] = pd.to_numeric(df_elder[target_col], errors='coerce').fillna(0)
+    else:
+        st.error("독거노인 인구 컬럼이 설정되지 않아 비율 계산을 건너뜁니다.")
+
+    # 병합
+    df = pd.merge(df_elder, df_facility_grouped, on="지역", how="inner")
+
+    # *********************************
+    # 비율 계산 (독거노인 1000명당 의료기관 수)
+    # *********************************
+    if target_col is not None:
+        # 독거노인 1000명당 의료기관 수 = (의료기관 수 / 독거노인 수) * 1000
+        df["의료기관_비율"] = (df["의료기관_수"] / (df[target_col].replace(0, 1) + 1e-9)) * 1000
+        df = df.rename(columns={"의료기관_비율": "독거노인_1000명당_의료기관_수"})
+
+        st.subheader(" 병합 결과 데이터")
+        st.dataframe(df[["지역", target_col, "의료기관_수", "독거노인_1000명당_의료기관_수"]])
+
+        # -----------------------------
+        # 지도 시각화
+        # -----------------------------
+        geojson_url = "
