@@ -1,4 +1,4 @@
- # app.py
+# app.py
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -30,7 +30,7 @@ def normalize_name(name):
     if pd.isna(name):
         return ""
     s = str(name)
-    s = re.sub(r"\(.*?\)", "", s)  # 괄호 내용 제거
+    s = re.sub(r"\(.*?\)", "", s)
     s = s.replace("특례시", "시").replace("광역시", "시")
     s = s.replace("특별자치시", "시").replace("특별자치도", "도")
     return re.sub(r"\s+", " ", s.strip())
@@ -57,14 +57,26 @@ def download_geojson():
             pass
     return None
 
+def read_file_auto(file):
+    """CSV 인코딩 자동 감지"""
+    if file.name.endswith("xlsx"):
+        return pd.read_excel(file)
+    else:
+        for enc in ["utf-8", "cp949", "euc-kr"]:
+            try:
+                return pd.read_csv(file, encoding=enc, low_memory=False)
+            except Exception:
+                continue
+        raise ValueError("파일 인코딩을 인식할 수 없습니다. UTF-8 또는 CP949로 저장해주세요.")
+
 # --- Data load ---
 if (elder_file is None) or (med_file is None):
     st.warning("📢 두 개의 파일(독거노인, 의료기관)을 업로드해주세요.")
     st.stop()
 
 try:
-    elder_df = pd.read_excel(elder_file) if elder_file.name.endswith("xlsx") else pd.read_csv(elder_file)
-    med_df = pd.read_csv(med_file, low_memory=False)
+    elder_df = read_file_auto(elder_file)
+    med_df = read_file_auto(med_file)
 except Exception as e:
     st.error(f"파일 로드 중 오류: {e}")
     st.stop()
@@ -161,5 +173,5 @@ st.dataframe(bottom)
 
 # --- Download ---
 st.header("💾 결과 다운로드")
-csv = merged.to_csv(index=False).encode("utf-8")
+csv = merged.to_csv(index=False).encode("utf-8-sig")
 st.download_button("CSV로 저장", csv, file_name="접근성_분석결과.csv", mime="text/csv")
