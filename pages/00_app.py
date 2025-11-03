@@ -14,8 +14,8 @@ st.markdown("""
 이 앱은 **지역별 독거노인 인구수**와 **의료기관 수**를 비교하여
 얼마나 고르게 분포되어 있는지를 지도 위에서 시각화합니다.
 
-- **빨간색**: 독거노인 인구 대비 의료기관이 **상대적으로 부족한 지역** (전국 중앙값보다 낮음)
-- **초록색**: 독거노인 인구 대비 의료기관이 **상대적으로 많은 지역** (전국 중앙값보다 높음)
+- **빨간색**: 독거노인 인구 대비 의료기관이 **가장 부족한 하위 25% 지역**
+- **초록색**: 독거노인 인구 대비 의료기관이 **상대적으로 많은 상위 75% 지역**
 """)
 
 # -----------------------------
@@ -144,11 +144,11 @@ if df_elder is not None and df_facility is not None:
         df = df.rename(columns={"의료기관_비율": "독거노인_1000명당_의료기관_수"})
         
         # -----------------------------
-        # 지도 시각화를 위한 중앙값 계산 (***수정된 부분***)
+        # 지도 시각화를 위한 25번째 백분위수 계산 (***수정된 부분***)
         # -----------------------------
-        median_ratio = df["독거노인_1000명당_의료기관_수"].median()
-        mean_ratio = df["독거노인_1000명당_의료기관_수"].mean() # 참고용으로 평균도 계산
-
+        # 25번째 백분위수 (Q1)를 색상 중앙값으로 설정
+        percentile_25 = df["독거노인_1000명당_의료기관_수"].quantile(0.25)
+        
         st.subheader(" 병합 결과 데이터")
         st.dataframe(df[["지역", target_col, "의료기관_수", "독거노인_1000명당_의료기관_수"]])
 
@@ -171,10 +171,10 @@ if df_elder is not None and df_facility is not None:
             locations="지역",
             featureidkey="properties.name",
             color="독거노인_1000명당_의료기관_수",
-            # ⭐ 색상 척도의 중앙값(노란색)을 중앙값(Median)으로 설정
+            # ⭐ 색상 척도의 중앙값(노란색)을 25번째 백분위수로 설정
             color_continuous_scale="RdYlGn", 
-            color_continuous_midpoint=median_ratio, 
-            title=f"시도별 독거노인 **1000명당** 의료기관 분포 (전국 중앙값 기준: {median_ratio:.2f})", 
+            color_continuous_midpoint=percentile_25, 
+            title=f"시도별 독거노인 **1000명당** 의료기관 분포 (하위 25% 기준: {percentile_25:.2f})", 
             range_color=(df["독거노인_1000명당_의료기관_수"].min(), df["독거노인_1000명당_의료기관_수"].max()),
             hover_data={
                 "지역": True, 
